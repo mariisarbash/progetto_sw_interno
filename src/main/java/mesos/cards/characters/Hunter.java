@@ -17,7 +17,8 @@ public class Hunter extends CharacterCard {
     @Override
     public void onPurchase(Player player) {
         if (hasImmediateFoodIcon) {
-            player.gainFood(3);
+            int hunterCount = player.getTribe().countCharacters(mesos.enums.CharacterType.HUNTER);
+            player.gainFood(hunterCount);
         }
     }
 

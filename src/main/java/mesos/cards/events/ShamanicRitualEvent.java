@@ -41,15 +41,21 @@ public class ShamanicRitualEvent extends EventCard {
 
         for (Player player : players) {
             int icons = iconsByPlayer.get(player);
-            boolean tiedForMax = icons == maxIcons && maxCount > 1;
+            boolean tiedForMax = (icons == maxIcons && maxCount > 1);
 
+            // Gestione del PREMIO (Maggioranza)
             if (icons == max) {
-                int reward = player.getTribe().doublesShamanicReward(player) ? ppReward * 2 : ppReward;
+                int reward = ppReward;
+                // Raddoppia SOLO se non c'è pareggio e il giocatore ha l'effetto
+                if (!tiedForMax && player.getTribe().doublesShamanicReward(player)) {
+                    reward = ppReward * 2;
+                }
                 player.addPrestige(reward);
-            } else if (tiedForMax && player.getTribe().gainsShamanicRewardOnTie(player)) {
-                int reward = player.getTribe().doublesShamanicReward(player) ? ppReward * 2 : ppReward;
-                player.addPrestige(reward);
-            } else if (icons == min && !player.getTribe().ignoresShamanicPenalty(player)) {
+            }
+
+            // Gestione della PENALITÀ (Minoranza).
+            // Usiamo un "if" separato e non un "else if" per coprire il Pareggio Totale!
+            if (icons == min && !player.getTribe().ignoresShamanicPenalty(player)) {
                 player.removePrestige(ppPenalty);
             }
         }

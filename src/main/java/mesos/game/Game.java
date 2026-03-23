@@ -160,6 +160,14 @@ public class Game {
             player.addPrestige(builderPrestige);
             player.addPrestige(buildingPrestige);
         }
+
+        // Determina il vincitore ordinando la lista
+        players.sort((p1, p2) -> {
+            if (p1.getPrestigePoints() != p2.getPrestigePoints()) {
+                return Integer.compare(p2.getPrestigePoints(), p1.getPrestigePoints()); // Ordine decrescente di PP
+            }
+            return Integer.compare(p2.getFood(), p1.getFood()); // Spareggio: Ordine decrescente di Cibo
+        });
     }
 
     private Player findPlayerByTotem(Totem totem) {
