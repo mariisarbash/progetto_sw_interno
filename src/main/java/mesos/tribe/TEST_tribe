@@ -1,0 +1,126 @@
+package mesos.tribe;
+
+import mesos.cards.BuildingCard;
+import mesos.cards.characters.*;
+import mesos.enums.CharacterType;
+import mesos.player.Player;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Test unitari per la classe Tribe.
+ * Verifica la gestione della collezione di carte e i calcoli dei bonus.
+ */
+class TribeTestSuite {
+
+    private Tribe tribe;
+    private Player mockPlayer;
+
+    @BeforeEach
+    void setUp() {
+        tribe = new Tribe();
+        mockPlayer = mock(Player.class);
+    }
+
+    @Test
+    @DisplayName("TRIBE - Calcolo dello sconto per la costruzione (Builders)")
+    void testCalculateBuildingDiscount() {
+        // Creiamo dei mock per i Builder
+        Builder builder1 = mock(Builder.class);
+        when(builder1.getDiscountValue()).thenReturn(2);
+        
+        Builder builder2 = mock(Builder.class);
+        when(builder2.getDiscountValue()).thenReturn(1);
+
+        // Aggiungiamo i builder alla tribù
+        tribe.addCharacter(builder1);
+        tribe.addCharacter(builder2);
+
+        // Lo sconto totale deve essere 2 + 1 = 3
+        assertEquals(3, tribe.calculateBuildingDiscount(), 
+            "Lo sconto totale deve essere la somma dei valori di sconto dei Builder presenti.");
+    }
+
+    @Test
+    @DisplayName("TRIBE - Conteggio dei set completi di personaggi")
+    void testCountCompleteCharacterSets() {
+        // Simuliamo la presenza di un set completo di 6 tipi diversi
+        tribe.addCharacter(createMockCharacter(CharacterType.HUNTER));
+        tribe.addCharacter(createMockCharacter(CharacterType.GATHERER));
+        tribe.addCharacter(createMockCharacter(CharacterType.BUILDER));
+        tribe.addCharacter(createMockCharacter(CharacterType.SHAMAN));
+        tribe.addCharacter(createMockCharacter(CharacterType.ARTIST));
+        tribe.addCharacter(createMockCharacter(CharacterType.INVENTOR));
+
+        assertEquals(1, tribe.countCompleteCharacterSets(), 
+            "Con un personaggio per tipo, il conteggio dei set completi deve essere 1.");
+    }
+
+    @Test
+    @DisplayName("TRIBE - Logica degli Inventori (Coppie e Icone)")
+    void testInventorPairsAndIcons() {
+        // Creiamo due inventori con la stessa invenzione (es. "WHEEL")
+        Inventor inv1 = mock(Inventor.class);
+        when(inv1.getInventorType()).thenReturn("WHEEL");
+        when(inv1.getType()).thenReturn(CharacterType.INVENTOR);
+        
+        Inventor inv2 = mock(Inventor.class);
+        when(inv2.getInventorType()).thenReturn("WHEEL");
+        when(inv2.getType()).thenReturn(CharacterType.INVENTOR);
+
+        tribe.addCharacter(inv1);
+        tribe.addCharacter(inv2);
+
+        assertEquals(1, tribe.countInventorPairs(), "Due ruote devono formare una coppia.");
+        assertEquals(1, tribe.countDistinctInventorIcons(), "C'è solo un tipo di icona distinta (WHEEL).");
+    }
+
+    @Test
+    @DisplayName("TRIBE - Notifica agli edifici quando viene aggiunto un personaggio")
+    void testBuildingNotification() {
+        // Mock di un edificio
+        BuildingCard mockBuilding = mock(BuildingCard.class);
+        tribe.addBuilding(mockBuilding);
+
+        // Aggiungiamo un nuovo personaggio
+        CharacterCard newChar = createMockCharacter(CharacterType.HUNTER);
+        
+        // Chiamiamo il metodo di notifica
+        tribe.notifyBuildingsOnCharacterAdded(mockPlayer, newChar);
+
+        // Verifichiamo che l'edificio abbia ricevuto la chiamata onCharacterAdded
+        verify(mockBuilding, times(1)).onCharacterAdded(mockPlayer, newChar);
+    }
+
+    @Test
+    @DisplayName("TRIBE - Calcolo sconti sostentamento (Sustenance)")
+    void testSustenanceDiscountFromBuildings() {
+        // Mock di un edificio che fornisce 2 di sconto cibo
+        BuildingCard mockBuilding = mock(BuildingCard.class);
+        when(mockBuilding.getExtraSustenanceDiscount(mockPlayer)).thenReturn(2);
+        
+        tribe.addBuilding(mockBuilding);
+
+        int extraDiscount = tribe.getExtraSustenanceDiscountFromBuildings(mockPlayer);
+        
+        assertEquals(2, extraDiscount, "Lo sconto extra derivante dagli edifici deve essere 2.");
+    }
+
+    /**
+     * Helper per creare mock di CharacterCard con un tipo specifico.
+     */
+    private CharacterCard createMockCharacter(CharacterType type) {
+        CharacterCard card = mock(CharacterCard.class);
+        when(card.getType()).thenReturn(type);
+        // Serve per i filtri di tipo (es. Builder.class::isInstance)
+        if (type == CharacterType.BUILDER) return mock(Builder.class);
+        if (type == CharacterType.INVENTOR) return mock(Inventor.class);
+        return card;
+    }
+}
