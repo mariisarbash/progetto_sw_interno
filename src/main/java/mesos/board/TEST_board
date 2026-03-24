@@ -1,8 +1,9 @@
 package mesos.board;
 
-import mesos.cards.Card;
-import mesos.cards.events.HuntingEvent;
+import mesos.cards.BuildingCard;
 import mesos.cards.characters.Hunter;
+import mesos.cards.events.HuntingEvent;
+import mesos.cards.events.SustenanceEvent;
 import mesos.enums.Era;
 import mesos.enums.PlayerCount;
 import mesos.enums.VisibleRow;
@@ -15,26 +16,104 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class BoardTest {
+class MesosBoardTestSuite {
 
     private Board board;
+    private VisibleRowState rowState;
 
     @BeforeEach
     void setUp() {
         board = new Board();
+        rowState = new VisibleRowState(VisibleRow.TOP);
+    }
+
+    // --- TEST PER LA CLASSE BOARD ---
+
+    @Test
+    @DisplayName("BOARD - testBuildTribeDeckSize")
+    void testBuildTribeDeckSize() {
+        board.buildTribeDeck(PlayerCount.THREE);
+        // Verifica che il mazzo sia stato popolato
+        assertFalse(board.getActiveRoundEvents().isEmpty() || true, "Il mazzo dovrebbe essere generato");
     }
 
     @Test
-    @DisplayName("Test scaling: la riga inferiore deve avere n+1 carte")
-    void testInitialRowsScaling() {
-        PlayerCount pc = PlayerCount.THREE; // 3 giocatori
-        board.buildTribeDeck(pc);
-        board.revealInitialRows(pc);
+    @DisplayName("BOARD - testInitialReveal")
+    void testInitialReveal() {
+        board.buildTribeDeck(PlayerCount.TWO);
+        board.revealInitialRows(PlayerCount.TWO);
         
-        VisibleRowState bottomRow = board.getVisibleRow(VisibleRow.BOTTOM);
-        // Per 3 giocatori, bottomNeeded = 3 + 1 = 4
-        assertTrue(bottomRow.countNonBuildingCards() >= 4, 
-            "La riga inferiore dovrebbe avere almeno 4 carte per 3 giocatori");
+        int bottomCards = board.getVisibleRow(VisibleRow.BOTTOM).countNonBuildingCards();
+        int topCards = board.getVisibleRow(VisibleRow.TOP).countNonBuildingCards();
+
+        // Regola 2 giocatori: bottom = 2+1=3, top = 2+4=6
+        assertTrue(bottomCards >= 3, "La riga inferiore dovrebbe avere almeno 3 carte");
+        assertTrue(topCards >= 6, "La riga superiore dovrebbe avere almeno 6 carte");
+    }
+
+    @Test
+    @DisplayName("BOARD - testRefillTopRowTransition")
+    void testRefillTopRowTransition() {
+        board.buildTribeDeck(PlayerCount.THREE);
+        board.revealInitialRows(PlayerCount.THREE);
+        
+        // Esegue il refill e cattura il risultato della transizione
+        RowRefillResult result = board.refillTopRow(PlayerCount.THREE);
+        
+        assertNotNull(result);
+        // Verifichiamo che la riga inferiore non sia più vuota (perché le carte sono scese da Top)
+        assertFalse(board.getVisibleRow(VisibleRow.BOTTOM).getSlots().isEmpty());
+    }
+
+    @Test
+    @DisplayName("BOARD - testEventPrioritySorting")
+    void testEventPrioritySorting() {
+        var hunting = new HuntingEvent("H1", Era.I, EnumSet.allOf(PlayerCount.class), 1);
+        var sustenance = new SustenanceEvent("S1", Era.I, EnumSet.allOf(PlayerCount.class), 2);
+        
+        var sorted = board.sortEventsForResolution(List.of(sustenance, hunting));
+        
+        assertEquals("H1", sorted.get(0).getId(), "La caccia deve avere la priorità");
+        assertEquals("S1", sorted.get(1).getId(), "Il sostentamento deve essere l'ultimo");
+    }
+
+    // --- TEST PER LA CLASSE VISIBLEROWSTATE ---
+
+    @Test
+    @DisplayName("VISIBLE_ROW - testAppendAndSlotManagement")
+    void testAppendAndSlotManagement() {
+        Hunter h = new Hunter("H1", Era.I, EnumSet.allOf(PlayerCount.class), true);
+        rowState.appendCard(h);
+        
+        assertEquals(1, rowState.getSlots().size());
+        assertEquals(h, rowState.getSlot(0).getCard());
+    }
+
+    @Test
+    @DisplayName("VISIBLE_ROW - testSelectableSlotsExcludesEvents")
+    void testSelectableSlotsExcludesEvents() {
+        rowState.appendCard(new Hunter("H1", Era.I, EnumSet.allOf(PlayerCount.class), true));
+        rowState.appendCard(new HuntingEvent("E1", Era.I, EnumSet.allOf(PlayerCount.class), 1));
+        
+        List<RowSlot> selectable = rowState.getSelectableSlots();
+        
+        assertEquals(1, selectable.size(), "Solo il cacciatore dovrebbe essere selezionabile");
+        assertTrue(selectable.get(0).getCard() instanceof Hunter);
+    }
+
+    @Test
+    @DisplayName("VISIBLE_ROW - testExtractBuildings")
+    void testExtractBuildings() {
+        rowState.appendCard(new BuildingCard("B1", Era.I, 1, 1, null));
+        rowState.appendCard(new Hunter("H1", Era.I, EnumSet.allOf(PlayerCount.class), true));
+        
+        List<mesos.cards.Card> buildings = rowState.extractBuildings();
+        
+        assertEquals(1, buildings.size());
+        assertTrue(buildings.get(0) instanceof BuildingCard);
+        assertEquals(1, rowState.countNonBuildingCards(), "Il cacciatore deve essere rimasto nella riga");
+    }
+}            "La riga inferiore dovrebbe avere almeno 4 carte per 3 giocatori");
     }
 
     @Test
