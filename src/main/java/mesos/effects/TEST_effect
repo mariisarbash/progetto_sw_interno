@@ -1,0 +1,145 @@
+package mesos.effects;
+
+import mesos.board.Board;
+import mesos.board.RowSlot;
+import mesos.board.VisibleRowState;
+import mesos.cards.characters.Builder;
+import mesos.cards.characters.Hunter;
+import mesos.enums.CharacterType;
+import mesos.enums.EndGameScoringType;
+import mesos.enums.EventType;
+import mesos.enums.TriggeredFoodRewardType;
+import mesos.enums.VisibleRow;
+import mesos.player.Player;
+import mesos.player.Tribe;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.mockito.Mockito;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class BuildingEffectsTestSuite {
+
+    private Player mockPlayer;
+    private Tribe mockTribe;
+
+    @BeforeEach
+    void setUp() {
+        mockPlayer = mock(Player.class);
+        mockTribe = mock(Tribe.class);
+        when(mockPlayer.getTribe()).thenReturn(mockTribe);
+    }
+
+    // --- TEST ENDGAMESCORINGEFFECT ---
+
+    @Test
+    @DisplayName("SCORING - testPerCharacterTypeScoring")
+    void testPerCharacterTypeScoring() {
+        EndGameScoringEffect effect = new EndGameScoringEffect(EndGameScoringType.PER_CHARACTER_TYPE, 3, CharacterType.HUNTER);
+        when(mockTribe.countCharacters(CharacterType.HUNTER)).thenReturn(4);
+
+        int bonus = effect.getEndGameBonus(mockPlayer);
+        assertEquals(12, bonus, "Dovrebbe dare 3 punti per ognuno dei 4 cacciatori");
+    }
+
+    @Test
+    @DisplayName("SCORING - testDoubleBuildersScoring")
+    void testDoubleBuildersScoring() {
+        EndGameScoringEffect effect = new EndGameScoringEffect(EndGameScoringType.DOUBLE_BUILDERS, 0, null);
+        
+        Builder b1 = mock(Builder.class);
+        when(b1.getPpValue()).thenReturn(5);
+        Builder b2 = mock(Builder.class);
+        when(b2.getPpValue()).thenReturn(3);
+        
+        when(mockTribe.getCharacterCards()).thenReturn(List.of(b1, b2));
+
+        int bonus = effect.getEndGameBonus(mockPlayer);
+        assertEquals(8, bonus, "Dovrebbe sommare il valore di prestigio dei costruttori (5+3)");
+    }
+
+    // --- TEST TRIGGEREDFOODREWARDEFFECT ---
+
+    @Test
+    @DisplayName("TRIGGER - testFoodRewardOnCompleteSet")
+    void testFoodRewardOnCompleteSet() {
+        TriggeredFoodRewardEffect effect = new TriggeredFoodRewardEffect(TriggeredFoodRewardType.COMPLETE_SET, 5);
+        
+        // Simula il completamento del primo set
+        when(mockTribe.countCompleteCharacterSets()).thenReturn(1);
+        effect.onCharacterAdded(mockPlayer, mock(Hunter.class));
+        
+        verify(mockPlayer, times(1)).gainFood(5);
+
+        // Simula l'aggiunta di un'altra carta che non completa un nuovo set
+        effect.onCharacterAdded(mockPlayer, mock(Hunter.class));
+        verify(mockPlayer, times(1)).gainFood(anyInt()); // Non dovrebbe essere chiamato di nuovo
+    }
+
+    // --- TEST SUSTENANCEDISCOUNTEFFECT ---
+
+    @Test
+    @DisplayName("DISCOUNT - testDiscountCalculation")
+    void testDiscountCalculation() {
+        SustenanceDiscountEffect effect = new SustenanceDiscountEffect(CharacterType.ARTIST, 2);
+        when(mockTribe.countCharacters(CharacterType.ARTIST)).thenReturn(3);
+
+        int discount = effect.getExtraSustenanceDiscount(mockPlayer);
+        assertEquals(6, discount, "Dovrebbe dare uno sconto di 2 per ognuno dei 3 artisti");
+    }
+
+    // --- TEST SHAMANICRITUALEFFECT ---
+
+    @Test
+    @DisplayName("SHAMANIC - testAdditionalShamanIcons")
+    void testAdditionalShamanIcons() {
+        ShamanicRitualEffect effect = new ShamanicRitualEffect(3, true, false, false);
+        
+        assertEquals(3, effect.getAdditionalShamanIcons(mockPlayer));
+        assertTrue(effect.ignoresShamanicPenalty(mockPlayer));
+        assertFalse(effect.doublesShamanicReward(mockPlayer));
+    }
+
+    // --- TEST PERCHARACTEREVENTBONUSEFFECT ---
+
+    @Test
+    @DisplayName("EVENT_BONUS - testEventBonusMatching")
+    void testEventBonusMatching() {
+        PerCharacterEventBonusEffect effect = new PerCharacterEventBonusEffect(EventType.HUNTING, CharacterType.HUNTER, 2, 0);
+
+        // Caso Corrispondente
+        int bonusMatch = effect.getExtraFoodPerCharacterForEvent(EventType.HUNTING, CharacterType.HUNTER, mockPlayer);
+        assertEquals(2, bonusMatch);
+
+        // Caso Non Corrispondente (Evento diverso)
+        int bonusMismatch = effect.getExtraFoodPerCharacterForEvent(EventType.SUSTENANCE, CharacterType.HUNTER, mockPlayer);
+        assertEquals(0, bonusMismatch);
+    }
+
+    // --- TEST EXTRATOPROWPICKEFFECT ---
+
+    @Test
+    @DisplayName("EXTRA_PICK - testExtraPickAcquiresCharacter")
+    void testExtraPickAcquiresCharacter() {
+        ExtraTopRowPickEffect effect = new ExtraTopRowPickEffect();
+        Board mockBoard = mock(Board.class);
+        VisibleRowState mockRow = mock(VisibleRowState.class);
+        RowSlot mockSlot = mock(RowSlot.class);
+        Hunter mockHunter = mock(Hunter.class);
+
+        when(mockBoard.getVisibleRow(VisibleRow.TOP)).thenReturn(mockRow);
+        when(mockRow.getSelectableSlots()).thenReturn(List.of(mockSlot));
+        when(mockSlot.getCard()).thenReturn(mockHunter);
+        when(mockSlot.getIndex()).thenReturn(0);
+
+        effect.onEndOfActionPhase(mockPlayer, mockBoard);
+
+        // Verifica che la carta sia stata presa dal tabellone e aggiunta al giocatore
+        verify(mockBoard).takeCard(any());
+        verify(mockPlayer).acquireCharacter(mockHunter);
+    }
+}
