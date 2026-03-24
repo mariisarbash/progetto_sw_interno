@@ -1,0 +1,100 @@
+package mesos.board;
+
+import mesos.cards.Card;
+import mesos.cards.events.HuntingEvent;
+import mesos.cards.characters.Hunter;
+import mesos.enums.Era;
+import mesos.enums.PlayerCount;
+import mesos.enums.VisibleRow;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+
+import java.util.EnumSet;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class BoardTest {
+
+    private Board board;
+
+    @BeforeEach
+    void setUp() {
+        board = new Board();
+    }
+
+    @Test
+    @DisplayName("Test scaling: la riga inferiore deve avere n+1 carte")
+    void testInitialRowsScaling() {
+        PlayerCount pc = PlayerCount.THREE; // 3 giocatori
+        board.buildTribeDeck(pc);
+        board.revealInitialRows(pc);
+        
+        VisibleRowState bottomRow = board.getVisibleRow(VisibleRow.BOTTOM);
+        // Per 3 giocatori, bottomNeeded = 3 + 1 = 4
+        assertTrue(bottomRow.countNonBuildingCards() >= 4, 
+            "La riga inferiore dovrebbe avere almeno 4 carte per 3 giocatori");
+    }
+
+    @Test
+    @DisplayName("Test selettività: non si possono selezionare gli eventi")
+    void testSelectableSlotsExcludesEvents() {
+        VisibleRowState row = board.getVisibleRow(VisibleRow.TOP);
+        
+        // Aggiungiamo un personaggio e un evento
+        row.appendCard(new Hunter("H1", Era.I, EnumSet.allOf(PlayerCount.class), true)); //
+        row.appendCard(new HuntingEvent("E1", Era.I, EnumSet.allOf(PlayerCount.class), 1)); //
+
+        List<RowSlot> selectable = row.getSelectableSlots();
+        
+        // Deve esserci solo il cacciatore, l'evento no
+        assertEquals(1, selectable.size(), "Solo il personaggio deve essere selezionabile");
+        assertFalse(selectable.get(0).containsEvent(), "L'evento non deve essere tra i selezionabili");
+    }
+
+    @Test
+    @DisplayName("Test Refill: riempimento degli slot vuoti")
+    void testAppendCardFillsEmptySlots() {
+        VisibleRowState row = new VisibleRowState(VisibleRow.TOP); //
+        Card c1 = new Hunter("H1", Era.I, EnumSet.allOf(PlayerCount.class), true);
+        Card c2 = new Hunter("H2", Era.I, EnumSet.allOf(PlayerCount.class), true);
+        
+        row.appendCard(c1);
+        row.appendCard(c2);
+        
+        // Rimuoviamo la prima carta (indice 0)
+        row.removeCardAt(0);
+        
+        // Aggiungiamo una nuova carta: deve andare nello slot 0, non creare il 2
+        Card c3 = new Hunter("H3", Era.I, EnumSet.allOf(PlayerCount.class), true);
+        row.appendCard(c3);
+        
+        assertEquals(c3, row.getSlot(0).getCard(), "La nuova carta deve riempire il buco lasciato allo slot 0");
+    }
+
+    @Test
+    @DisplayName("Test Era Transition: rileva il cambio era nel mazzo")
+    void testRefillTriggersEraTransition() {
+        PlayerCount pc = PlayerCount.TWO;
+        board.buildTribeDeck(pc); // Genera il mazzo mischiato
+        
+        // Eseguiamo un refill
+        RowRefillResult result = board.refillTopRow(pc); //
+        
+        // Il test verifica se l'oggetto risultato è coerente
+        assertNotNull(result);
+        if (result.isEraTransitionTriggered()) {
+            assertNotNull(result.getNewEra(), "Se la transizione è attiva, deve esserci una nuova Era");
+        }
+    }
+
+    @Test
+    @DisplayName("Test Robustezza: rimozione da indice invalido")
+    void testRemoveInvalidIndex() {
+        VisibleRowState row = board.getVisibleRow(VisibleRow.BOTTOM);
+        Card removed = row.removeCardAt(999); // Indice inesistente
+        
+        assertNull(removed, "La rimozione di un indice inesistente deve restituire null");
+    }
+}
