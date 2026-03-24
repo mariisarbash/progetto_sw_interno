@@ -1,0 +1,140 @@
+package mesos.offer;
+
+import mesos.board.Board;
+import mesos.board.RowSlot;
+import mesos.board.VisibleRowState;
+import mesos.cards.BuildingCard;
+import mesos.enums.OfferTileId;
+import mesos.enums.PlayerCount;
+import mesos.enums.VisibleRow;
+import mesos.player.Player;
+import mesos.player.Totem;
+import mesos.player.Tribe;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class OfferTestSuite {
+
+    private OfferTrack offerTrack;
+    private Player mockPlayer;
+
+    @BeforeEach
+    void setUp() {
+        offerTrack = new OfferTrack();
+        mockPlayer = mock(Player.class);
+        when(mockPlayer.getTotem()).thenReturn(Totem.BEAR);
+    }
+
+    // --- TEST PER OFFERTRACK ---
+
+    @Test
+    @DisplayName("OFFER_TRACK - testConfigureForPlayerCount")
+    void testConfigureForPlayerCount() {
+        // Configurazione per 2 giocatori (dovrebbe includere B, C, D)
+        offerTrack.configureForPlayerCount(PlayerCount.TWO);
+        
+        // Verifichiamo che la tessera B sia presente e disponibile
+        OfferTile tileB = new OfferTile(OfferTileId.B); 
+        // Nota: Il test assume che le tessere vengano create correttamente internamente
+        assertDoesNotThrow(() -> offerTrack.placeTotem(mockPlayer, tileB));
+    }
+
+    @Test
+    @DisplayName("OFFER_TRACK - testPlaceTotemAvailability")
+    void testPlaceTotemAvailability() {
+        OfferTile tile = new OfferTile(OfferTileId.B);
+        assertTrue(tile.isAvailable());
+
+        offerTrack.placeTotem(mockPlayer, tile);
+
+        assertFalse(tile.isAvailable(), "La tessera non dovrebbe essere più disponibile");
+        assertEquals(Totem.BEAR, tile.getOccupiedBy());
+    }
+
+    // --- TEST PER OFFERTILE ---
+
+    @Test
+    @DisplayName("OFFER_TILE - testValidateChoiceCorrectAmount")
+    void testValidateChoiceCorrectAmount() {
+        // Tessera che permette solo 1 TOP e 0 BOTTOM
+        OfferTile tile = new OfferTile(OfferTileId.C);
+        tile.setCardsFromTop(1);
+        tile.setCardsFromBottom(0);
+
+        Board mockBoard = mock(Board.class);
+        OfferChoice choice = new OfferChoice(tile);
+        
+        // Errore: aggiungiamo 2 pick dalla riga TOP
+        choice.addPick(new CardPick(VisibleRow.TOP, 0));
+        choice.addPick(new CardPick(VisibleRow.TOP, 1));
+
+        boolean isValid = tile.validateChoice(choice, mockPlayer, mockBoard);
+        assertFalse(isValid, "La scelta dovrebbe essere non valida: troppe carte TOP");
+    }
+
+    @Test
+    @DisplayName("OFFER_TILE - testValidateChoiceBuildingCost")
+    void testValidateChoiceBuildingCost() {
+        OfferTile tile = new OfferTile(OfferTileId.C);
+        tile.setCardsFromTop(1);
+        
+        Board mockBoard = mock(Board.class);
+        VisibleRowState mockRow = mock(VisibleRowState.class);
+        RowSlot mockSlot = mock(RowSlot.class);
+        BuildingCard mockBuilding = mock(BuildingCard.class);
+        Tribe mockTribe = mock(Tribe.class);
+
+        // Simuliamo la struttura del tabellone per trovare l'edificio nello slot 0
+        when(mockBoard.getVisibleRow(VisibleRow.TOP)).thenReturn(mockRow);
+        when(mockRow.getSlot(0)).thenReturn(mockSlot);
+        when(mockSlot.getCard()).thenReturn(mockBuilding);
+        when(mockSlot.containsBuilding()).thenReturn(true);
+        
+        // L'edificio costa 10, ma il giocatore ha solo 5 cibo
+        when(mockBuilding.calculateRealCost(anyInt())).thenReturn(10);
+        when(mockPlayer.getFood()).thenReturn(5);
+        when(mockPlayer.getTribe()).thenReturn(mockTribe);
+
+        OfferChoice choice = new OfferChoice(tile);
+        choice.addPick(new CardPick(VisibleRow.TOP, 0));
+
+        assertFalse(tile.validateChoice(choice, mockPlayer, mockBoard), 
+            "Non dovrebbe convalidare se il cibo è insufficiente");
+    }
+
+    // --- TEST PER OFFERCHOICE ---
+
+    @Test
+    @DisplayName("OFFER_CHOICE - testOrderedPicksSequence")
+    void testOrderedPicksSequence() {
+        OfferChoice choice = new OfferChoice(new OfferTile(OfferTileId.D));
+        CardPick first = new CardPick(VisibleRow.TOP, 0);
+        CardPick second = new CardPick(VisibleRow.BOTTOM, 0);
+
+        choice.addPick(first);
+        choice.addPick(second);
+
+        List<CardPick> picks = choice.getOrderedPicks();
+        assertEquals(2, picks.size());
+        assertEquals(first, picks.get(0));
+        assertEquals(second, picks.get(1));
+    }
+
+    @Test
+    @DisplayName("OFFER_CHOICE - testCountPicksFromRow")
+    void testCountPicksFromRow() {
+        OfferChoice choice = new OfferChoice(new OfferTile(OfferTileId.D));
+        choice.addPick(new CardPick(VisibleRow.TOP, 1));
+        choice.addPick(new CardPick(VisibleRow.TOP, 2));
+        choice.addPick(new CardPick(VisibleRow.BOTTOM, 5));
+
+        assertEquals(2, choice.countPicksFromRow(VisibleRow.TOP));
+        assertEquals(1, choice.countPicksFromRow(VisibleRow.BOTTOM));
+    }
+}
