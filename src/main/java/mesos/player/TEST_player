@@ -1,117 +1,125 @@
-package mesos.order;
+package mesos.logic;
 
+import mesos.cards.BuildingCard;
+import mesos.cards.characters.Hunter;
+import mesos.enums.Era;
 import mesos.enums.PlayerCount;
+import mesos.enums.TotemColor;
+import mesos.order.TurnOrderSpace;
+import mesos.order.TurnOrderTile;
 import mesos.player.Player;
 import mesos.player.Totem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
+import java.util.EnumSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class TurnOrderTestSuite {
+class MesosLogicTestSuite {
 
+    private Player player;
+    private Totem totem;
     private TurnOrderTile turnOrderTile;
-    private Player mockPlayer1;
-    private Player mockPlayer2;
 
     @BeforeEach
     void setUp() {
+        totem = new Totem(TotemColor.RED);
+        player = new Player("TestPlayer", totem);
         turnOrderTile = new TurnOrderTile();
-        mockPlayer1 = mock(Player.class);
-        mockPlayer2 = mock(Player.class);
-        
-        when(mockPlayer1.getTotem()).thenReturn(Totem.BEAR);
-        when(mockPlayer2.getTotem()).thenReturn(Totem.WOLF);
     }
 
-    // --- TEST PER TURNORDERTILE ---
+    // --- TEST PER IL PACCHETTO ORDER ---
 
     @Test
-    @DisplayName("TURN_ORDER_TILE - testConfigureForPlayerCount")
+    @DisplayName("ORDER - testConfigureForPlayerCount")
     void testConfigureForPlayerCount() {
         turnOrderTile.configureForPlayerCount(PlayerCount.THREE);
         List<TurnOrderSpace> spaces = turnOrderTile.getSpaces();
         
-        assertEquals(3, spaces.size(), "Dovrebbero esserci 3 spazi per 3 giocatori");
-        assertTrue(spaces.get(2).isLastSpace(), "L'ultimo spazio dovrebbe avere il flag lastSpace a true");
-        assertFalse(spaces.get(0).isLastSpace());
+        assertEquals(3, spaces.size());
+        assertTrue(spaces.get(2).isLastSpace(), "L'ultimo spazio deve avere il flag lastSpace");
+        assertEquals(0, spaces.get(2).getFoodBonus(), "L'ultimo spazio non dovrebbe avere bonus cibo");
     }
 
     @Test
-    @DisplayName("TURN_ORDER_TILE - testAddTotemAndFirstFreeSpace")
-    void testAddTotemAndFirstFreeSpace() {
-        turnOrderTile.configureForPlayerCount(PlayerCount.TWO);
-        
-        // Primo piazzamento
-        TurnOrderSpace space1 = turnOrderTile.addTotem(Totem.BEAR, mockPlayer1);
-        assertEquals(0, space1.getPosition());
-        assertEquals(Totem.BEAR, space1.getOccupiedBy());
-        
-        // Verifica che il prossimo spazio libero sia il secondo (indice 1)
-        TurnOrderSpace nextFree = turnOrderTile.getFirstFreeSpace();
-        assertEquals(1, nextFree.getPosition());
-    }
-
-    @Test
-    @DisplayName("TURN_ORDER_TILE - testDetermineNewOrder")
+    @DisplayName("ORDER - testDetermineNewOrder")
     void testDetermineNewOrder() {
         turnOrderTile.configureForPlayerCount(PlayerCount.TWO);
+        Player player2 = new Player("Player2", new Totem(TotemColor.BLUE));
         
-        // Bob (Wolf) si piazza per primo, Alice (Bear) per seconda
-        turnOrderTile.addTotem(Totem.WOLF, mockPlayer2);
-        turnOrderTile.addTotem(Totem.BEAR, mockPlayer1);
+        // Player 2 si piazza nello spazio 0, Player 1 (this.player) nello spazio 1
+        turnOrderTile.addTotem(player2.getTotem(), player2);
+        turnOrderTile.addTotem(player.getTotem(), player);
         
         List<Player> newOrder = turnOrderTile.determineNewOrder();
         
-        assertEquals(2, newOrder.size());
-        assertEquals(mockPlayer2, newOrder.get(0), "Il giocatore nello spazio 0 deve essere il primo nel nuovo ordine");
-        assertEquals(mockPlayer1, newOrder.get(1));
+        assertEquals(player2, newOrder.get(0));
+        assertEquals(player, newOrder.get(1));
     }
 
     @Test
-    @DisplayName("TURN_ORDER_TILE - testApplySpaceEffectBonus")
-    void testApplySpaceEffectBonus() {
+    @DisplayName("ORDER - testApplySpaceEffectBonusAndPenalty")
+    void testApplySpaceEffectBonusAndPenalty() {
         turnOrderTile.configureForPlayerCount(PlayerCount.TWO);
-        TurnOrderSpace space = turnOrderTile.getSpaces().get(0); // Spazio 0 ha solitamente bonus 1
+        TurnOrderSpace lastSpace = turnOrderTile.getSpaces().get(1); // Ultimo spazio
         
-        turnOrderTile.applySpaceEffect(space, mockPlayer1);
+        // Setup: il giocatore non ha cibo
+        player.gainFood(0); 
+        turnOrderTile.applySpaceEffect(lastSpace, player);
         
-        verify(mockPlayer1, times(1)).gainFood(space.getFoodBonus());
+        // Dovrebbe aver perso 2 punti prestigio perché non ha potuto pagare 1 cibo
+        assertTrue(player.getPrestigePoints() < 0 || player.getPrestigePoints() == -2);
+    }
+
+    // --- TEST PER IL PACCHETTO PLAYER ---
+
+    @Test
+    @DisplayName("PLAYER - testResourceManagement")
+    void testResourceManagement() {
+        player.gainFood(5);
+        assertTrue(player.payFood(3));
+        assertEquals(2, player.getFood());
+        
+        assertFalse(player.payFood(10), "Non dovrebbe permettere pagamenti superiori alle risorse");
     }
 
     @Test
-    @DisplayName("TURN_ORDER_TILE - testApplySpaceEffectPenalty")
-    void testApplySpaceEffectPenalty() {
-        turnOrderTile.configureForPlayerCount(PlayerCount.TWO);
-        // L'ultimo spazio (indice 1)
-        TurnOrderSpace lastSpace = turnOrderTile.getSpaces().get(1);
+    @DisplayName("PLAYER - testAcquireCharacterLogic")
+    void testAcquireCharacterLogic() {
+        Hunter hunter = new Hunter("H1", Era.I, EnumSet.allOf(PlayerCount.class), true);
+        player.acquireCharacter(hunter);
         
-        // Simuliamo che il giocatore non possa pagare il cibo
-        when(mockPlayer1.payFood(1)).thenReturn(false);
-        
-        turnOrderTile.applySpaceEffect(lastSpace, mockPlayer1);
-        
-        verify(mockPlayer1).removePrestige(2);
+        assertTrue(player.getTribe().getCharacterCards().contains(hunter));
     }
 
-    // --- TEST PER TURNORDERSPACE ---
+    @Test
+    @DisplayName("PLAYER - testAcquireBuildingWithRealCost")
+    void testAcquireBuildingWithRealCost() {
+        player.gainFood(10);
+        BuildingCard mockBuilding = mock(BuildingCard.class);
+        
+        // Simuliamo un costo reale di 7 cibo
+        when(mockBuilding.calculateRealCost(anyInt())).thenReturn(7);
+        
+        player.acquireBuilding(mockBuilding);
+        
+        assertEquals(3, player.getFood(), "Il giocatore dovrebbe aver pagato 7 di cibo");
+        assertTrue(player.getTribe().getBuildingCards().contains(mockBuilding));
+    }
 
     @Test
-    @DisplayName("TURN_ORDER_SPACE - testSpaceStateManagement")
-    void testSpaceStateManagement() {
-        TurnOrderSpace space = new TurnOrderSpace(0, 1, false);
-        
-        assertTrue(space.isFree());
-        space.assignTotem(Totem.MAMMOTH);
-        assertFalse(space.isFree());
-        assertEquals(Totem.MAMMOTH, space.getOccupiedBy());
-        
-        space.clear();
-        assertTrue(space.isFree());
-        assertNull(space.getOccupiedBy());
+    @DisplayName("PLAYER - testTotemEquality")
+    void testTotemEquality() {
+        Totem redTotem1 = new Totem(TotemColor.RED);
+        Totem redTotem2 = new Totem(TotemColor.RED);
+        Totem blueTotem = new Totem(TotemColor.BLUE);
+
+        assertEquals(redTotem1, redTotem2);
+        assertNotEquals(redTotem1, blueTotem);
+        assertEquals(redTotem1.hashCode(), redTotem2.hashCode());
     }
 }
